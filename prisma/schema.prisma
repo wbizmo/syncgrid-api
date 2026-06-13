@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("free")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members   TeamMember[]
+  apiKeys   ApiKey[]
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  email     String
+  role      String
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  teamId    String?
+  name      String
+  key       String   @unique
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+}
+
+model ProviderConfig {
+  id        String   @id @default(cuid())
+  provider  String
+  name      String
+  status    String   @default("active")
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WebhookEvent {
+  id         String   @id @default(cuid())
+  provider   String
+  event      String
+  status     String   @default("received")
+  payload    Json
+  receivedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model RequestLog {
+  id           String   @id @default(cuid())
+  method       String
+  path         String
+  statusCode   Int
+  responseTime Int
+  apiKey       String?
+  createdAt    DateTime @default(now())
+}
