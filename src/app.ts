@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { registerSwagger } from './config/swagger';
 import { healthRoutes } from './modules/health/health.routes';
+import { providerRoutes } from './modules/providers/providers.routes';
 
 export async function buildApp() {
   const app = Fastify({
@@ -17,6 +18,7 @@ export async function buildApp() {
   await registerSwagger(app);
 
   await app.register(healthRoutes);
+  await app.register(providerRoutes);
 
   return app;
 }
