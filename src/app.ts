@@ -6,6 +6,7 @@ import { registerSwagger } from './config/swagger';
 
 import { apiKeyAuth } from './shared/api-key-auth';
 import { requestLogger } from './shared/request-logger';
+import { rateLimit } from './shared/rate-limit';
 
 import { healthRoutes } from './modules/health/health.routes';
 import { providerRoutes } from './modules/providers/providers.routes';
@@ -30,6 +31,7 @@ export async function buildApp() {
 
   app.addHook('onRequest', requestLogger);
 
+  app.addHook('preHandler', rateLimit);
   app.addHook('preHandler', apiKeyAuth);
 
   await app.register(healthRoutes);
