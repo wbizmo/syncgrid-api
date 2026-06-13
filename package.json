@@ -2,18 +2,31 @@
   "name": "syncgrid-api",
   "version": "1.0.0",
   "description": "A unified integration gateway API for payments, email, webhooks, provider routing, API keys, request logs, and third-party service abstraction.",
-  "main": "index.js",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/wbizmo/syncgrid-api.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "keywords": [
+    "api",
+    "fastify",
+    "typescript",
+    "payments",
+    "email",
+    "webhooks",
+    "integrations"
+  ],
+  "author": "Williams",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/wbizmo/syncgrid-api/issues"
   },
