@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requestLogs } from './logs.store';
+import { prisma } from '../../shared/prisma';
 
 export async function logRoutes(app: FastifyInstance) {
   app.get(
@@ -8,14 +8,50 @@ export async function logRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Logs'],
         summary: 'List request logs',
-        description: 'Returns recorded API request logs.',
+        description:
+          'Returns recorded API request logs with optional filtering by method, status code, and API key.',
+        querystring: {
+          type: 'object',
+          properties: {
+            method: {
+              type: 'string',
+              description: 'Filter by HTTP method. Example: GET, POST, DELETE.',
+            },
+            statusCode: {
+              type: 'number',
+              description: 'Filter by response status code. Example: 200, 201, 404.',
+            },
+            apiKey: {
+              type: 'string',
+              description: 'Filter logs by API key.',
+            },
+          },
+        },
       },
     },
-    async () => {
+    async (request) => {
+      const query = request.query as {
+        method?: string;
+        statusCode?: number;
+        apiKey?: string;
+      };
+
+      const logs = await prisma.requestLog.findMany({
+        where: {
+          method: query.method,
+          statusCode: query.statusCode,
+          apiKey: query.apiKey,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 100,
+      });
+
       return {
         success: true,
-        count: requestLogs.length,
-        data: requestLogs,
+        count: logs.length,
+        data: logs,
       };
     },
   );
@@ -33,6 +69,7 @@ export async function logRoutes(app: FastifyInstance) {
           properties: {
             id: {
               type: 'string',
+              description: 'Request log ID.',
             },
           },
         },
@@ -43,7 +80,11 @@ export async function logRoutes(app: FastifyInstance) {
         id: string;
       };
 
-      const log = requestLogs.find((item) => item.id === params.id);
+      const log = await prisma.requestLog.findUnique({
+        where: {
+          id: params.id,
+        },
+      });
 
       if (!log) {
         return reply.code(404).send({
@@ -65,29 +106,48 @@ export async function logRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Analytics'],
         summary: 'Usage analytics',
-        description: 'Returns usage statistics derived from request logs.',
+        description:
+          'Returns usage statistics derived from persisted request logs.',
       },
     },
     async () => {
-      const totalRequests = requestLogs.length;
+      const totalRequests = await prisma.requestLog.count();
 
-      const successfulRequests = requestLogs.filter(
-        (log) => log.statusCode >= 200 && log.statusCode < 400,
-      ).length;
+      const successfulRequests = await prisma.requestLog.count({
+        where: {
+          statusCode: {
+            gte: 200,
+            lt: 400,
+          },
+        },
+      });
 
-      const failedRequests = requestLogs.filter(
-        (log) => log.statusCode >= 400,
-      ).length;
+      const failedRequests = await prisma.requestLog.count({
+        where: {
+          statusCode: {
+            gte: 400,
+          },
+        },
+      });
 
-      const averageResponseTime =
-        totalRequests > 0
-          ? Math.round(
-              requestLogs.reduce(
-                (total, log) => total + log.responseTime,
-                0,
-              ) / totalRequests,
-            )
-          : 0;
+      const responseTimeAggregate = await prisma.requestLog.aggregate({
+        _avg: {
+          responseTime: true,
+        },
+      });
+
+      const topEndpoints = await prisma.requestLog.groupBy({
+        by: ['path'],
+        _count: {
+          path: true,
+        },
+        orderBy: {
+          _count: {
+            path: 'desc',
+          },
+        },
+        take: 5,
+      });
 
       return {
         success: true,
@@ -95,7 +155,13 @@ export async function logRoutes(app: FastifyInstance) {
           totalRequests,
           successfulRequests,
           failedRequests,
-          averageResponseTime,
+          averageResponseTime: Math.round(
+            responseTimeAggregate._avg.responseTime || 0,
+          ),
+          topEndpoints: topEndpoints.map((endpoint) => ({
+            path: endpoint.path,
+            count: endpoint._count.path,
+          })),
         },
       };
     },

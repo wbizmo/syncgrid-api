@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { requestLogs } from '../modules/logs/logs.store';
+import { prisma } from './prisma';
 
 export async function requestLogger(
   request: FastifyRequest,
@@ -8,21 +8,23 @@ export async function requestLogger(
   const start = Date.now();
 
   reply.raw.on('finish', () => {
-    requestLogs.unshift({
-      id: `LOG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: request.method,
-      path: request.url,
-      statusCode: reply.statusCode,
-      responseTime: Date.now() - start,
-      timestamp: new Date().toISOString(),
-      apiKey:
-        typeof request.headers['x-api-key'] === 'string'
-          ? request.headers['x-api-key']
-          : undefined,
-    });
+    const responseTime = Date.now() - start;
 
-    if (requestLogs.length > 1000) {
-      requestLogs.pop();
-    }
+    prisma.requestLog
+      .create({
+        data: {
+          method: request.method,
+          path: request.url,
+          statusCode: reply.statusCode,
+          responseTime,
+          apiKey:
+            typeof request.headers['x-api-key'] === 'string'
+              ? request.headers['x-api-key']
+              : null,
+        },
+      })
+      .catch((error) => {
+        request.log.error(error, 'Failed to save request log');
+      });
   });
 }
