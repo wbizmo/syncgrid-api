@@ -9,6 +9,7 @@ import { providerRoutes } from './modules/providers/providers.routes';
 import { paymentRoutes } from './modules/payments/payments.routes';
 import { emailRoutes } from './modules/email/email.routes';
 import { webhookRoutes } from './modules/webhooks/webhooks.routes';
+import { apiKeyRoutes } from './modules/api-keys/api-keys.routes';
 
 export async function buildApp() {
   const app = Fastify({
@@ -32,6 +33,8 @@ export async function buildApp() {
   await app.register(emailRoutes);
 
   await app.register(webhookRoutes);
+
+  await app.register(apiKeyRoutes);
 
   return app;
 }
