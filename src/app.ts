@@ -16,6 +16,7 @@ import { emailRoutes } from './modules/email/email.routes';
 import { webhookRoutes } from './modules/webhooks/webhooks.routes';
 import { apiKeyRoutes } from './modules/api-keys/api-keys.routes';
 import { logRoutes } from './modules/logs/logs.routes';
+import { teamRoutes } from './modules/teams/teams.routes';
 
 export async function buildApp() {
   const app = Fastify({
@@ -51,6 +52,8 @@ export async function buildApp() {
   await app.register(webhookRoutes);
 
   await app.register(logRoutes);
+
+  await app.register(teamRoutes);
 
   return app;
 }
