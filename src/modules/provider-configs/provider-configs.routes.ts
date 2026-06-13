@@ -1,13 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-
-const providerConfigs: Array<{
-  id: string;
-  provider: string;
-  name: string;
-  status: 'active' | 'inactive';
-  createdAt: string;
-  config: Record<string, unknown>;
-}> = [];
+import { prisma } from '../../shared/prisma';
 
 export async function providerConfigRoutes(app: FastifyInstance) {
   app.post(
@@ -16,6 +8,28 @@ export async function providerConfigRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Providers'],
         summary: 'Create provider configuration',
+        description:
+          'Stores a provider configuration for payments, email, or webhook integrations.',
+        body: {
+          type: 'object',
+          required: ['provider', 'name', 'config'],
+          properties: {
+            provider: {
+              type: 'string',
+              description: 'Provider name. Example: paystack, stripe, resend, mailgun.',
+            },
+            name: {
+              type: 'string',
+              minLength: 2,
+              description: 'Human-readable configuration name.',
+            },
+            config: {
+              type: 'object',
+              additionalProperties: true,
+              description: 'Provider credentials and settings.',
+            },
+          },
+        },
       },
     },
     async (request, reply) => {
@@ -25,16 +39,14 @@ export async function providerConfigRoutes(app: FastifyInstance) {
         config: Record<string, unknown>;
       };
 
-      const providerConfig = {
-        id: `CFG-${Date.now()}`,
-        provider: body.provider,
-        name: body.name,
-        status: 'active' as const,
-        createdAt: new Date().toISOString(),
-        config: body.config,
-      };
-
-      providerConfigs.unshift(providerConfig);
+      const providerConfig = await prisma.providerConfig.create({
+        data: {
+          provider: body.provider,
+          name: body.name,
+          status: 'active',
+          config: body.config,
+        },
+      });
 
       return reply.code(201).send({
         success: true,
@@ -44,6 +56,12 @@ export async function providerConfigRoutes(app: FastifyInstance) {
   );
 
   app.get('/provider-configs', async () => {
+    const providerConfigs = await prisma.providerConfig.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
     return {
       success: true,
       count: providerConfigs.length,
@@ -56,11 +74,13 @@ export async function providerConfigRoutes(app: FastifyInstance) {
       id: string;
     };
 
-    const config = providerConfigs.find(
-      (item) => item.id === params.id,
-    );
+    const providerConfig = await prisma.providerConfig.findUnique({
+      where: {
+        id: params.id,
+      },
+    });
 
-    if (!config) {
+    if (!providerConfig) {
       return reply.code(404).send({
         success: false,
         message: 'Provider configuration not found',
@@ -69,7 +89,7 @@ export async function providerConfigRoutes(app: FastifyInstance) {
 
     return {
       success: true,
-      data: config,
+      data: providerConfig,
     };
   });
 
@@ -78,23 +98,32 @@ export async function providerConfigRoutes(app: FastifyInstance) {
       id: string;
     };
 
-    const config = providerConfigs.find(
-      (item) => item.id === params.id,
-    );
+    const providerConfig = await prisma.providerConfig.findUnique({
+      where: {
+        id: params.id,
+      },
+    });
 
-    if (!config) {
+    if (!providerConfig) {
       return reply.code(404).send({
         success: false,
         message: 'Provider configuration not found',
       });
     }
 
-    config.status = 'inactive';
+    const disabledProviderConfig = await prisma.providerConfig.update({
+      where: {
+        id: params.id,
+      },
+      data: {
+        status: 'inactive',
+      },
+    });
 
     return {
       success: true,
       message: 'Provider configuration disabled',
-      data: config,
+      data: disabledProviderConfig,
     };
   });
 }
