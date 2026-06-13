@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 model Team {
@@ -14,8 +14,8 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members   TeamMember[]
-  apiKeys   ApiKey[]
+  members TeamMember[]
+  apiKeys ApiKey[]
 }
 
 model TeamMember {
@@ -26,6 +26,8 @@ model TeamMember {
   createdAt DateTime @default(now())
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
 }
 
 model ApiKey {
@@ -38,6 +40,8 @@ model ApiKey {
   updatedAt DateTime @updatedAt
 
   team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
 }
 
 model ProviderConfig {
@@ -48,6 +52,8 @@ model ProviderConfig {
   config    Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([provider])
 }
 
 model WebhookEvent {
@@ -58,6 +64,9 @@ model WebhookEvent {
   payload    Json
   receivedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([provider])
+  @@index([status])
 }
 
 model RequestLog {
@@ -68,4 +77,7 @@ model RequestLog {
   responseTime Int
   apiKey       String?
   createdAt    DateTime @default(now())
+
+  @@index([apiKey])
+  @@index([createdAt])
 }
