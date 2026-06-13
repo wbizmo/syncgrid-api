@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 
 import { registerSwagger } from './config/swagger';
+import { apiKeyAuth } from './shared/api-key-auth';
 
 import { healthRoutes } from './modules/health/health.routes';
 import { providerRoutes } from './modules/providers/providers.routes';
@@ -24,17 +25,14 @@ export async function buildApp() {
 
   await registerSwagger(app);
 
+  app.addHook('preHandler', apiKeyAuth);
+
   await app.register(healthRoutes);
-
-  await app.register(providerRoutes);
-
-  await app.register(paymentRoutes);
-
-  await app.register(emailRoutes);
-
-  await app.register(webhookRoutes);
-
   await app.register(apiKeyRoutes);
+  await app.register(providerRoutes);
+  await app.register(paymentRoutes);
+  await app.register(emailRoutes);
+  await app.register(webhookRoutes);
 
   return app;
 }
