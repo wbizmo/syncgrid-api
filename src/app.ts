@@ -5,6 +5,7 @@ import { registerSwagger } from './config/swagger';
 import { healthRoutes } from './modules/health/health.routes';
 import { providerRoutes } from './modules/providers/providers.routes';
 import { paymentRoutes } from './modules/payments/payments.routes';
+import { emailRoutes } from './modules/email/email.routes';
 
 export async function buildApp() {
   const app = Fastify({
@@ -21,6 +22,7 @@ export async function buildApp() {
   await app.register(healthRoutes);
   await app.register(providerRoutes);
   await app.register(paymentRoutes);
+  await app.register(emailRoutes);
 
   return app;
 }
