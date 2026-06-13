@@ -1,16 +1,12 @@
 import type { FastifyInstance } from 'fastify';
+import { prisma } from '../../shared/prisma';
 
-const teams: Array<{
-  id: string;
-  name: string;
-  slug: string;
-  plan: 'free' | 'pro' | 'business';
-  members: Array<{
-    email: string;
-    role: 'owner' | 'admin' | 'developer' | 'viewer';
-  }>;
-  createdAt: string;
-}> = [];
+function createSlug(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
 
 export async function teamRoutes(app: FastifyInstance) {
   app.post(
@@ -19,26 +15,15 @@ export async function teamRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Teams'],
         summary: 'Create team',
-        description: 'Creates a team workspace for managing API keys, provider configurations, logs, and integrations.',
+        description:
+          'Creates a team workspace for managing API keys, provider configurations, logs, and integrations.',
         body: {
           type: 'object',
           required: ['name', 'ownerEmail'],
           properties: {
-            name: {
-              type: 'string',
-              minLength: 2,
-              description: 'Team or workspace name.',
-            },
-            ownerEmail: {
-              type: 'string',
-              format: 'email',
-              description: 'Email address of the team owner.',
-            },
-            plan: {
-              type: 'string',
-              enum: ['free', 'pro', 'business'],
-              description: 'Subscription plan for the team.',
-            },
+            name: { type: 'string', minLength: 2 },
+            ownerEmail: { type: 'string', format: 'email' },
+            plan: { type: 'string', enum: ['free', 'pro', 'business'] },
           },
         },
       },
@@ -50,21 +35,22 @@ export async function teamRoutes(app: FastifyInstance) {
         plan?: 'free' | 'pro' | 'business';
       };
 
-      const team = {
-        id: `TEAM-${Date.now()}`,
-        name: body.name,
-        slug: body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-        plan: body.plan || ('free' as const),
-        members: [
-          {
-            email: body.ownerEmail,
-            role: 'owner' as const,
+      const team = await prisma.team.create({
+        data: {
+          name: body.name,
+          slug: `${createSlug(body.name)}-${Date.now()}`,
+          plan: body.plan || 'free',
+          members: {
+            create: {
+              email: body.ownerEmail,
+              role: 'owner',
+            },
           },
-        ],
-        createdAt: new Date().toISOString(),
-      };
-
-      teams.unshift(team);
+        },
+        include: {
+          members: true,
+        },
+      });
 
       return reply.code(201).send({
         success: true,
@@ -74,6 +60,15 @@ export async function teamRoutes(app: FastifyInstance) {
   );
 
   app.get('/teams', async () => {
+    const teams = await prisma.team.findMany({
+      include: {
+        members: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
     return {
       success: true,
       count: teams.length,
@@ -83,7 +78,15 @@ export async function teamRoutes(app: FastifyInstance) {
 
   app.get('/teams/:id', async (request, reply) => {
     const params = request.params as { id: string };
-    const team = teams.find((item) => item.id === params.id);
+
+    const team = await prisma.team.findUnique({
+      where: {
+        id: params.id,
+      },
+      include: {
+        members: true,
+      },
+    });
 
     if (!team) {
       return reply.code(404).send({
@@ -105,7 +108,11 @@ export async function teamRoutes(app: FastifyInstance) {
       role: 'admin' | 'developer' | 'viewer';
     };
 
-    const team = teams.find((item) => item.id === params.id);
+    const team = await prisma.team.findUnique({
+      where: {
+        id: params.id,
+      },
+    });
 
     if (!team) {
       return reply.code(404).send({
@@ -114,15 +121,27 @@ export async function teamRoutes(app: FastifyInstance) {
       });
     }
 
-    team.members.push({
-      email: body.email,
-      role: body.role,
+    await prisma.teamMember.create({
+      data: {
+        teamId: params.id,
+        email: body.email,
+        role: body.role,
+      },
+    });
+
+    const updatedTeam = await prisma.team.findUnique({
+      where: {
+        id: params.id,
+      },
+      include: {
+        members: true,
+      },
     });
 
     return reply.code(201).send({
       success: true,
       message: 'Team member added',
-      data: team,
+      data: updatedTeam,
     });
   });
 }
