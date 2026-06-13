@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { simulateProviderExecution } from '../../shared/provider-failover';
 
 const supportedPaymentProviders = ['paystack', 'stripe', 'flutterwave'];
 
@@ -10,7 +11,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         tags: ['Payments'],
         summary: 'Create payment charge',
         description:
-          'Creates a payment charge using a selected provider. SyncGrid exposes one consistent API while routing the request to the chosen payment provider.',
+          'Creates a payment charge using one consistent API. If the primary provider fails, SyncGrid can simulate failover to a backup payment provider.',
         body: {
           type: 'object',
           required: ['provider', 'amount', 'currency', 'email'],
@@ -18,12 +19,12 @@ export async function paymentRoutes(app: FastifyInstance) {
             provider: {
               type: 'string',
               enum: supportedPaymentProviders,
-              description: 'Payment provider to route the charge through. Example: paystack',
+              description: 'Primary payment provider. Example: paystack',
             },
             amount: {
               type: 'number',
               minimum: 1,
-              description: 'Payment amount in the smallest currency unit. Example: 500000 for ₦5,000.',
+              description: 'Payment amount in the smallest currency unit.',
             },
             currency: {
               type: 'string',
@@ -38,46 +39,17 @@ export async function paymentRoutes(app: FastifyInstance) {
             },
             reference: {
               type: 'string',
+              description: 'Optional transaction reference.',
+            },
+            simulateFailure: {
+              type: 'boolean',
               description:
-                'Optional transaction reference. If omitted, SyncGrid generates one.',
+                'When true, SyncGrid simulates primary provider failure and attempts failover.',
             },
             metadata: {
               type: 'object',
               additionalProperties: true,
-              description:
-                'Optional custom metadata attached to the payment request.',
-            },
-          },
-        },
-        response: {
-          201: {
-            description: 'Payment charge created successfully',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', description: 'Request status.' },
-              message: { type: 'string', description: 'Result message.' },
-              data: {
-                type: 'object',
-                properties: {
-                  provider: { type: 'string', description: 'Selected payment provider.' },
-                  reference: { type: 'string', description: 'Transaction reference.' },
-                  amount: { type: 'number', description: 'Payment amount.' },
-                  currency: { type: 'string', description: 'Payment currency.' },
-                  status: { type: 'string', description: 'Payment status.' },
-                  authorizationUrl: {
-                    type: 'string',
-                    description: 'Hosted checkout URL returned by provider.',
-                  },
-                },
-              },
-            },
-          },
-          400: {
-            description: 'Invalid payment request',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', description: 'Request status.' },
-              message: { type: 'string', description: 'Validation or provider error.' },
+              description: 'Optional custom metadata.',
             },
           },
         },
@@ -90,22 +62,35 @@ export async function paymentRoutes(app: FastifyInstance) {
         currency: string;
         email: string;
         reference?: string;
+        simulateFailure?: boolean;
         metadata?: Record<string, unknown>;
       };
 
       const reference =
-        body.reference || `SG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        body.reference ||
+        `SG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const execution = simulateProviderExecution({
+        provider: body.provider,
+        category: 'payments',
+        shouldFail: body.simulateFailure,
+      });
 
       return reply.code(201).send({
         success: true,
-        message: 'Payment charge created successfully',
+        message: execution.failedOver
+          ? 'Payment charge created using fallback provider'
+          : 'Payment charge created successfully',
         data: {
-          provider: body.provider,
+          requestedProvider: body.provider,
+          usedProvider: execution.usedProvider,
+          attemptedProviders: execution.attemptedProviders,
+          failedOver: execution.failedOver,
           reference,
           amount: body.amount,
           currency: body.currency.toUpperCase(),
           status: 'pending',
-          authorizationUrl: `https://checkout.syncgrid.test/${body.provider}/${reference}`,
+          authorizationUrl: `https://checkout.syncgrid.test/${execution.usedProvider}/${reference}`,
         },
       });
     },
@@ -118,14 +103,14 @@ export async function paymentRoutes(app: FastifyInstance) {
         tags: ['Payments'],
         summary: 'Verify payment charge',
         description:
-          'Verifies a payment charge by reference. This demonstrates a unified verification endpoint across different payment providers.',
+          'Verifies a payment charge by reference using a unified verification endpoint.',
         params: {
           type: 'object',
           required: ['reference'],
           properties: {
             reference: {
               type: 'string',
-              description: 'Transaction reference to verify. Example: SG-1234567890-demo12',
+              description: 'Transaction reference to verify.',
             },
           },
         },
@@ -136,29 +121,7 @@ export async function paymentRoutes(app: FastifyInstance) {
             provider: {
               type: 'string',
               enum: supportedPaymentProviders,
-              description: 'Payment provider used for the original charge. Example: paystack',
-            },
-          },
-        },
-        response: {
-          200: {
-            description: 'Payment verification response',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', description: 'Request status.' },
-              data: {
-                type: 'object',
-                properties: {
-                  provider: { type: 'string', description: 'Payment provider.' },
-                  reference: { type: 'string', description: 'Transaction reference.' },
-                  status: { type: 'string', description: 'Payment status.' },
-                  verifiedAt: {
-                    type: 'string',
-                    format: 'date-time',
-                    description: 'Verification timestamp.',
-                  },
-                },
-              },
+              description: 'Payment provider used for the original charge.',
             },
           },
         },
