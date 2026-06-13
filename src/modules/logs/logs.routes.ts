@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../shared/prisma';
+import { getCache, setCache } from '../../shared/redis';
 
 export async function logRoutes(app: FastifyInstance) {
   app.get(
@@ -107,10 +108,22 @@ export async function logRoutes(app: FastifyInstance) {
         tags: ['Analytics'],
         summary: 'Usage analytics',
         description:
-          'Returns usage statistics derived from persisted request logs.',
+          'Returns usage statistics derived from persisted request logs. Response is cache-ready through Redis.',
       },
     },
-    async () => {
+    async (_request, reply) => {
+      const cacheKey = 'analytics:usage';
+      const cached = await getCache(cacheKey);
+
+      if (cached) {
+        reply.header('x-cache', 'HIT');
+
+        return {
+          ...(cached as Record<string, unknown>),
+          cached: true,
+        };
+      }
+
       const totalRequests = await prisma.requestLog.count();
 
       const successfulRequests = await prisma.requestLog.count({
@@ -149,8 +162,9 @@ export async function logRoutes(app: FastifyInstance) {
         take: 5,
       });
 
-      return {
+      const response = {
         success: true,
+        cached: false,
         data: {
           totalRequests,
           successfulRequests,
@@ -164,6 +178,12 @@ export async function logRoutes(app: FastifyInstance) {
           })),
         },
       };
+
+      await setCache(cacheKey, response, 30);
+
+      reply.header('x-cache', 'MISS');
+
+      return response;
     },
   );
 }

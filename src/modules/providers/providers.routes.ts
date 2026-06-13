@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { getCache, setCache } from '../../shared/redis';
 
 const providers = [
   {
@@ -11,6 +12,13 @@ const providers = [
   {
     id: 'stripe',
     name: 'Stripe',
+    category: 'payments',
+    status: 'inactive',
+    supportedActions: ['create_payment', 'verify_payment'],
+  },
+  {
+    id: 'flutterwave',
+    name: 'Flutterwave',
     category: 'payments',
     status: 'inactive',
     supportedActions: ['create_payment', 'verify_payment'],
@@ -29,6 +37,13 @@ const providers = [
     status: 'inactive',
     supportedActions: ['send_email'],
   },
+  {
+    id: 'sendgrid',
+    name: 'SendGrid',
+    category: 'email',
+    status: 'inactive',
+    supportedActions: ['send_email'],
+  },
 ];
 
 export async function providerRoutes(app: FastifyInstance) {
@@ -39,7 +54,7 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ['Providers'],
         summary: 'List integration providers',
         description:
-          'Returns all third-party providers supported by SyncGrid. Supports filtering by provider category and status.',
+          'Returns all third-party providers supported by SyncGrid. Supports filtering by provider category and status. Response is cache-ready through Redis.',
         querystring: {
           type: 'object',
           properties: {
@@ -55,47 +70,30 @@ export async function providerRoutes(app: FastifyInstance) {
             },
           },
         },
-        response: {
-          200: {
-            description: 'Provider list response',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', description: 'Request status.' },
-              count: { type: 'number', description: 'Number of returned providers.' },
-              data: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string', description: 'Provider ID. Example: paystack' },
-                    name: { type: 'string', description: 'Provider name. Example: Paystack' },
-                    category: {
-                      type: 'string',
-                      description: 'Provider category. Example: payments',
-                    },
-                    status: {
-                      type: 'string',
-                      description: 'Provider status. Example: active',
-                    },
-                    supportedActions: {
-                      type: 'array',
-                      description:
-                        'Actions supported by the provider. Example: create_payment, verify_payment',
-                      items: { type: 'string' },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const query = request.query as {
         category?: string;
         status?: string;
       };
+
+      const cacheKey = `providers:${query.category || 'all'}:${query.status || 'all'}`;
+      const cached = await getCache<{
+        success: boolean;
+        count: number;
+        data: typeof providers;
+        cached: boolean;
+      }>(cacheKey);
+
+      if (cached) {
+        reply.header('x-cache', 'HIT');
+
+        return {
+          ...cached,
+          cached: true,
+        };
+      }
 
       let result = providers;
 
@@ -107,11 +105,18 @@ export async function providerRoutes(app: FastifyInstance) {
         result = result.filter((provider) => provider.status === query.status);
       }
 
-      return {
+      const response = {
         success: true,
         count: result.length,
         data: result,
+        cached: false,
       };
+
+      await setCache(cacheKey, response, 60);
+
+      reply.header('x-cache', 'MISS');
+
+      return response;
     },
   );
 
@@ -132,43 +137,28 @@ export async function providerRoutes(app: FastifyInstance) {
             },
           },
         },
-        response: {
-          200: {
-            description: 'Provider details response',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', description: 'Request status.' },
-              data: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string', description: 'Provider ID.' },
-                  name: { type: 'string', description: 'Provider name.' },
-                  category: { type: 'string', description: 'Provider category.' },
-                  status: { type: 'string', description: 'Provider status.' },
-                  supportedActions: {
-                    type: 'array',
-                    description: 'Actions supported by the provider.',
-                    items: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
-          404: {
-            description: 'Provider not found',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', description: 'Request status.' },
-              message: { type: 'string', description: 'Error message.' },
-            },
-          },
-        },
       },
     },
     async (request, reply) => {
       const params = request.params as {
         providerId: string;
       };
+
+      const cacheKey = `providers:details:${params.providerId}`;
+      const cached = await getCache<{
+        success: boolean;
+        data: (typeof providers)[number];
+        cached: boolean;
+      }>(cacheKey);
+
+      if (cached) {
+        reply.header('x-cache', 'HIT');
+
+        return {
+          ...cached,
+          cached: true,
+        };
+      }
 
       const provider = providers.find((item) => item.id === params.providerId);
 
@@ -179,10 +169,17 @@ export async function providerRoutes(app: FastifyInstance) {
         });
       }
 
-      return {
+      const response = {
         success: true,
         data: provider,
+        cached: false,
       };
+
+      await setCache(cacheKey, response, 60);
+
+      reply.header('x-cache', 'MISS');
+
+      return response;
     },
   );
 }
