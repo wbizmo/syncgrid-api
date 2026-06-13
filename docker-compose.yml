@@ -1,0 +1,11 @@
+services:
+  syncgrid-api:
+    build: .
+    container_name: syncgrid-api
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "file:./dev.db"
+      REDIS_URL: ""
+    volumes:
+      - ./prisma:/app/prisma
