@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../shared/prisma';
+import { addWebhookReplayJob } from '../../jobs/queue';
 
 const supportedWebhookProviders = [
   'paystack',
@@ -59,148 +60,91 @@ export async function webhookRoutes(app: FastifyInstance) {
     },
   );
 
-  app.get(
-    '/webhooks',
-    {
-      schema: {
-        tags: ['Webhooks'],
-        summary: 'List webhook events',
-        description:
-          'Returns received webhook events. Supports filtering by provider and status.',
-        querystring: {
-          type: 'object',
-          properties: {
-            provider: {
-              type: 'string',
-              enum: supportedWebhookProviders,
-              description: 'Filter webhook events by provider. Example: paystack',
-            },
-            status: {
-              type: 'string',
-              enum: ['received', 'processing', 'processed', 'failed', 'replayed'],
-              description: 'Filter webhook events by status. Example: received',
-            },
-          },
-        },
+  app.get('/webhooks', async (request) => {
+    const query = request.query as {
+      provider?: string;
+      status?: string;
+    };
+
+    const webhookEvents = await prisma.webhookEvent.findMany({
+      where: {
+        provider: query.provider,
+        status: query.status,
       },
-    },
-    async (request) => {
-      const query = request.query as {
-        provider?: string;
-        status?: string;
-      };
-
-      const webhookEvents = await prisma.webhookEvent.findMany({
-        where: {
-          provider: query.provider,
-          status: query.status,
-        },
-        orderBy: {
-          receivedAt: 'desc',
-        },
-      });
-
-      return {
-        success: true,
-        count: webhookEvents.length,
-        data: webhookEvents,
-      };
-    },
-  );
-
-  app.get(
-    '/webhooks/:id',
-    {
-      schema: {
-        tags: ['Webhooks'],
-        summary: 'Get webhook event details',
-        description:
-          'Returns full details for a webhook event, including the stored payload.',
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: {
-            id: {
-              type: 'string',
-              description: 'Webhook event ID.',
-            },
-          },
-        },
+      orderBy: {
+        receivedAt: 'desc',
       },
-    },
-    async (request, reply) => {
-      const params = request.params as { id: string };
+    });
 
-      const webhookEvent = await prisma.webhookEvent.findUnique({
-        where: {
-          id: params.id,
-        },
-      });
+    return {
+      success: true,
+      count: webhookEvents.length,
+      data: webhookEvents,
+    };
+  });
 
-      if (!webhookEvent) {
-        return reply.code(404).send({
-          success: false,
-          message: 'Webhook event not found',
-        });
-      }
+  app.get('/webhooks/:id', async (request, reply) => {
+    const params = request.params as { id: string };
 
-      return {
-        success: true,
-        data: webhookEvent,
-      };
-    },
-  );
-
-  app.post(
-    '/webhooks/:id/replay',
-    {
-      schema: {
-        tags: ['Webhooks'],
-        summary: 'Replay webhook event',
-        description:
-          'Replays a stored webhook event. In production, this would push the event back into a retry queue.',
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: {
-            id: {
-              type: 'string',
-              description: 'Webhook event ID to replay.',
-            },
-          },
-        },
+    const webhookEvent = await prisma.webhookEvent.findUnique({
+      where: {
+        id: params.id,
       },
-    },
-    async (request, reply) => {
-      const params = request.params as { id: string };
+    });
 
-      const webhookEvent = await prisma.webhookEvent.findUnique({
-        where: {
-          id: params.id,
-        },
+    if (!webhookEvent) {
+      return reply.code(404).send({
+        success: false,
+        message: 'Webhook event not found',
       });
+    }
 
-      if (!webhookEvent) {
-        return reply.code(404).send({
-          success: false,
-          message: 'Webhook event not found',
-        });
-      }
+    return {
+      success: true,
+      data: webhookEvent,
+    };
+  });
 
-      const replayedWebhookEvent = await prisma.webhookEvent.update({
-        where: {
-          id: params.id,
-        },
-        data: {
-          status: 'replayed',
-        },
+  app.post('/webhooks/:id/replay', async (request, reply) => {
+    const params = request.params as { id: string };
+
+    const webhookEvent = await prisma.webhookEvent.findUnique({
+      where: {
+        id: params.id,
+      },
+    });
+
+    if (!webhookEvent) {
+      return reply.code(404).send({
+        success: false,
+        message: 'Webhook event not found',
       });
+    }
 
-      return reply.code(202).send({
-        success: true,
-        message: 'Webhook replay queued',
-        data: replayedWebhookEvent,
-      });
-    },
-  );
+    const job = await addWebhookReplayJob({
+      webhookEventId: webhookEvent.id,
+      provider: webhookEvent.provider,
+    });
+
+    const replayedWebhookEvent = await prisma.webhookEvent.update({
+      where: {
+        id: params.id,
+      },
+      data: {
+        status: job ? 'queued' : 'replayed',
+      },
+    });
+
+    return reply.code(202).send({
+      success: true,
+      message: job
+        ? 'Webhook replay queued'
+        : 'Webhook replay simulated because Redis is not configured',
+      data: {
+        webhookEvent: replayedWebhookEvent,
+        jobId: job?.id || null,
+        queueEnabled: Boolean(job),
+      },
+    });
+  });
 }

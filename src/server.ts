@@ -1,8 +1,11 @@
 import { buildApp } from './app';
+import { startWorkers } from './jobs/workers';
 
 async function start() {
   try {
     const app = await buildApp();
+
+    startWorkers();
 
     await app.listen({
       port: Number(process.env.PORT) || 3000,
