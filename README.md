@@ -665,10 +665,3 @@ SyncGrid demonstrates practical backend and platform engineering concepts:
 
 Williams
 GitHub: https://github.com/wbizmo
-Email: [wbizmo@gmail.com](mailto:wbizmo@gmail.com)
-
----
-
-## License
-
-MIT
