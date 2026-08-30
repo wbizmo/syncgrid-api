@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../../shared/prisma';
 import { addWebhookReplayJob } from '../../jobs/queue';
@@ -56,7 +57,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       if (!teamId) return;
 
       const params = request.params as { provider: string };
-      const payload = request.body as Record<string, unknown>;
+      const payload = request.body as Prisma.InputJsonObject;
 
       const webhookEvent = await prisma.webhookEvent.create({
         data: {
@@ -88,8 +89,8 @@ export async function webhookRoutes(app: FastifyInstance) {
     const webhookEvents = await prisma.webhookEvent.findMany({
       where: {
         teamId,
-        provider: query.provider,
-        status: query.status,
+        ...(query.provider !== undefined ? { provider: query.provider } : {}),
+        ...(query.status !== undefined ? { status: query.status } : {}),
       },
       orderBy: {
         receivedAt: 'desc',
