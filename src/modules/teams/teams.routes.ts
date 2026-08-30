@@ -66,10 +66,17 @@ export async function teamRoutes(app: FastifyInstance) {
     },
   );
 
-  app.get('/teams', async (request) => {
+  app.get('/teams', async (request, reply) => {
     const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
+    if (!callerTeamId) {
+      return reply.code(403).send({
+        success: false,
+        message: 'Bootstrap credentials cannot enumerate teams.',
+      });
+    }
+
     const teams = await prisma.team.findMany({
-      where: callerTeamId ? { id: callerTeamId } : undefined,
+      where: { id: callerTeamId },
       include: {
         members: true,
       },
@@ -89,7 +96,7 @@ export async function teamRoutes(app: FastifyInstance) {
     const params = request.params as { id: string };
     const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
 
-    if (callerTeamId && callerTeamId !== params.id) {
+    if (!callerTeamId || callerTeamId !== params.id) {
       return reply.code(404).send({ success: false, message: 'Team not found' });
     }
 
@@ -119,7 +126,7 @@ export async function teamRoutes(app: FastifyInstance) {
     const params = request.params as { id: string };
     const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
 
-    if (callerTeamId && callerTeamId !== params.id) {
+    if (!callerTeamId || callerTeamId !== params.id) {
       return reply.code(404).send({ success: false, message: 'Team not found' });
     }
 
