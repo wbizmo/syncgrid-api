@@ -29,6 +29,13 @@ export async function teamRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
+      if (request.authenticatedApiKey?.teamId) {
+        return reply.code(403).send({
+          success: false,
+          message: 'Team-scoped API keys cannot create additional teams.',
+        });
+      }
+
       const body = request.body as {
         name: string;
         ownerEmail: string;
@@ -59,8 +66,10 @@ export async function teamRoutes(app: FastifyInstance) {
     },
   );
 
-  app.get('/teams', async () => {
+  app.get('/teams', async (request) => {
+    const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
     const teams = await prisma.team.findMany({
+      where: callerTeamId ? { id: callerTeamId } : undefined,
       include: {
         members: true,
       },
@@ -78,6 +87,11 @@ export async function teamRoutes(app: FastifyInstance) {
 
   app.get('/teams/:id', async (request, reply) => {
     const params = request.params as { id: string };
+    const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
+
+    if (callerTeamId && callerTeamId !== params.id) {
+      return reply.code(404).send({ success: false, message: 'Team not found' });
+    }
 
     const team = await prisma.team.findUnique({
       where: {
@@ -103,6 +117,12 @@ export async function teamRoutes(app: FastifyInstance) {
 
   app.post('/teams/:id/members', async (request, reply) => {
     const params = request.params as { id: string };
+    const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
+
+    if (callerTeamId && callerTeamId !== params.id) {
+      return reply.code(404).send({ success: false, message: 'Team not found' });
+    }
+
     const body = request.body as {
       email: string;
       role: 'admin' | 'developer' | 'viewer';
