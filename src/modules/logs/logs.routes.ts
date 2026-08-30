@@ -1,6 +1,18 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../../shared/prisma';
 import { getCache, setCache } from '../../shared/redis';
+
+function requireTeamId(request: FastifyRequest, reply: FastifyReply): string | null {
+  const teamId = request.authenticatedApiKey?.teamId ?? null;
+  if (!teamId) {
+    reply.code(403).send({
+      success: false,
+      message: 'A team-scoped API key is required for logs and analytics.',
+    });
+    return null;
+  }
+  return teamId;
+}
 
 export async function logRoutes(app: FastifyInstance) {
   app.get(
@@ -10,7 +22,7 @@ export async function logRoutes(app: FastifyInstance) {
         tags: ['Logs'],
         summary: 'List request logs',
         description:
-          'Returns recorded API request logs with optional filtering by method, status code, and API key.',
+          'Returns recorded API request logs for the authenticated team with optional filtering by method, status code, and API-key fingerprint.',
         querystring: {
           type: 'object',
           properties: {
@@ -24,13 +36,16 @@ export async function logRoutes(app: FastifyInstance) {
             },
             apiKey: {
               type: 'string',
-              description: 'Filter logs by API key.',
+              description: 'Filter logs by stored API-key fingerprint.',
             },
           },
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
+      const teamId = requireTeamId(request, reply);
+      if (!teamId) return;
+
       const query = request.query as {
         method?: string;
         statusCode?: number;
@@ -39,6 +54,7 @@ export async function logRoutes(app: FastifyInstance) {
 
       const logs = await prisma.requestLog.findMany({
         where: {
+          teamId,
           method: query.method,
           statusCode: query.statusCode,
           apiKey: query.apiKey,
@@ -63,7 +79,7 @@ export async function logRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Logs'],
         summary: 'Get request log',
-        description: 'Returns a specific request log entry.',
+        description: 'Returns a specific request log entry for the authenticated team.',
         params: {
           type: 'object',
           required: ['id'],
@@ -77,13 +93,17 @@ export async function logRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
+      const teamId = requireTeamId(request, reply);
+      if (!teamId) return;
+
       const params = request.params as {
         id: string;
       };
 
-      const log = await prisma.requestLog.findUnique({
+      const log = await prisma.requestLog.findFirst({
         where: {
           id: params.id,
+          teamId,
         },
       });
 
@@ -108,11 +128,14 @@ export async function logRoutes(app: FastifyInstance) {
         tags: ['Analytics'],
         summary: 'Usage analytics',
         description:
-          'Returns usage statistics derived from persisted request logs. Response is cache-ready through Redis.',
+          'Returns usage statistics derived from persisted request logs for the authenticated team.',
       },
     },
-    async (_request, reply) => {
-      const cacheKey = 'analytics:usage';
+    async (request, reply) => {
+      const teamId = requireTeamId(request, reply);
+      if (!teamId) return;
+
+      const cacheKey = `analytics:usage:${teamId}`;
       const cached = await getCache(cacheKey);
 
       if (cached) {
@@ -124,10 +147,11 @@ export async function logRoutes(app: FastifyInstance) {
         };
       }
 
-      const totalRequests = await prisma.requestLog.count();
+      const totalRequests = await prisma.requestLog.count({ where: { teamId } });
 
       const successfulRequests = await prisma.requestLog.count({
         where: {
+          teamId,
           statusCode: {
             gte: 200,
             lt: 400,
@@ -137,6 +161,7 @@ export async function logRoutes(app: FastifyInstance) {
 
       const failedRequests = await prisma.requestLog.count({
         where: {
+          teamId,
           statusCode: {
             gte: 400,
           },
@@ -144,6 +169,7 @@ export async function logRoutes(app: FastifyInstance) {
       });
 
       const responseTimeAggregate = await prisma.requestLog.aggregate({
+        where: { teamId },
         _avg: {
           responseTime: true,
         },
@@ -151,6 +177,7 @@ export async function logRoutes(app: FastifyInstance) {
 
       const topEndpoints = await prisma.requestLog.groupBy({
         by: ['path'],
+        where: { teamId },
         _count: {
           path: true,
         },
