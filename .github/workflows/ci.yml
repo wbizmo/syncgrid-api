@@ -22,6 +22,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Refresh lockfile for dependency policy
+        run: npm install --package-lock-only --ignore-scripts
       - run: npm ci
       - name: Remediate compatible dependency vulnerabilities
         run: npm audit fix
