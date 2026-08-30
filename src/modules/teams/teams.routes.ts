@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../shared/prisma';
+import type { AuthenticatedRequest } from '../../shared/api-key-auth';
 
 function createSlug(value: string) {
   return value
@@ -15,8 +16,7 @@ export async function teamRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Teams'],
         summary: 'Create team',
-        description:
-          'Creates a team workspace for managing API keys, provider configurations, logs, and integrations.',
+        description: 'Creates a team workspace. Only a platform API key (an active key not yet bound to a team) may bootstrap new teams.',
         body: {
           type: 'object',
           required: ['name', 'ownerEmail'],
@@ -29,119 +29,62 @@ export async function teamRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const body = request.body as {
-        name: string;
-        ownerEmail: string;
-        plan?: 'free' | 'pro' | 'business';
-      };
+      const auth = (request as AuthenticatedRequest).auth;
+      if (!auth) return reply.code(401).send({ success: false, message: 'Unauthorized' });
+      if (auth.teamId) {
+        return reply.code(403).send({ success: false, message: 'Team-scoped API keys cannot create additional teams.' });
+      }
 
+      const body = request.body as { name: string; ownerEmail: string; plan?: 'free' | 'pro' | 'business' };
       const team = await prisma.team.create({
         data: {
           name: body.name,
           slug: `${createSlug(body.name)}-${Date.now()}`,
           plan: body.plan || 'free',
-          members: {
-            create: {
-              email: body.ownerEmail,
-              role: 'owner',
-            },
-          },
+          members: { create: { email: body.ownerEmail, role: 'owner' } },
         },
-        include: {
-          members: true,
-        },
+        include: { members: true },
       });
-
-      return reply.code(201).send({
-        success: true,
-        data: team,
-      });
+      return reply.code(201).send({ success: true, data: team });
     },
   );
 
-  app.get('/teams', async () => {
-    const teams = await prisma.team.findMany({
-      include: {
-        members: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-    return {
-      success: true,
-      count: teams.length,
-      data: teams,
-    };
+  app.get('/teams', async (request, reply) => {
+    const auth = (request as AuthenticatedRequest).auth;
+    if (!auth) return reply.code(401).send({ success: false, message: 'Unauthorized' });
+    if (!auth.teamId) {
+      return reply.code(403).send({ success: false, message: 'Platform keys cannot enumerate teams.' });
+    }
+    const team = await prisma.team.findUnique({ where: { id: auth.teamId }, include: { members: true } });
+    return { success: true, count: team ? 1 : 0, data: team ? [team] : [] };
   });
 
   app.get('/teams/:id', async (request, reply) => {
+    const auth = (request as AuthenticatedRequest).auth;
     const params = request.params as { id: string };
-
-    const team = await prisma.team.findUnique({
-      where: {
-        id: params.id,
-      },
-      include: {
-        members: true,
-      },
-    });
-
-    if (!team) {
-      return reply.code(404).send({
-        success: false,
-        message: 'Team not found',
-      });
+    if (!auth) return reply.code(401).send({ success: false, message: 'Unauthorized' });
+    if (!auth.teamId || auth.teamId !== params.id) {
+      return reply.code(404).send({ success: false, message: 'Team not found' });
     }
-
-    return {
-      success: true,
-      data: team,
-    };
+    const team = await prisma.team.findUnique({ where: { id: params.id }, include: { members: true } });
+    if (!team) return reply.code(404).send({ success: false, message: 'Team not found' });
+    return { success: true, data: team };
   });
 
   app.post('/teams/:id/members', async (request, reply) => {
+    const auth = (request as AuthenticatedRequest).auth;
     const params = request.params as { id: string };
-    const body = request.body as {
-      email: string;
-      role: 'admin' | 'developer' | 'viewer';
-    };
-
-    const team = await prisma.team.findUnique({
-      where: {
-        id: params.id,
-      },
-    });
-
-    if (!team) {
-      return reply.code(404).send({
-        success: false,
-        message: 'Team not found',
-      });
+    const body = request.body as { email: string; role: 'admin' | 'developer' | 'viewer' };
+    if (!auth) return reply.code(401).send({ success: false, message: 'Unauthorized' });
+    if (!auth.teamId || auth.teamId !== params.id) {
+      return reply.code(404).send({ success: false, message: 'Team not found' });
     }
 
-    await prisma.teamMember.create({
-      data: {
-        teamId: params.id,
-        email: body.email,
-        role: body.role,
-      },
-    });
+    const team = await prisma.team.findUnique({ where: { id: params.id } });
+    if (!team) return reply.code(404).send({ success: false, message: 'Team not found' });
 
-    const updatedTeam = await prisma.team.findUnique({
-      where: {
-        id: params.id,
-      },
-      include: {
-        members: true,
-      },
-    });
-
-    return reply.code(201).send({
-      success: true,
-      message: 'Team member added',
-      data: updatedTeam,
-    });
+    await prisma.teamMember.create({ data: { teamId: params.id, email: body.email, role: body.role } });
+    const updatedTeam = await prisma.team.findUnique({ where: { id: params.id }, include: { members: true } });
+    return reply.code(201).send({ success: true, message: 'Team member added', data: updatedTeam });
   });
 }
