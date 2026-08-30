@@ -46,13 +46,15 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.3",
     "eslint": "^10.5.0",
     "prettier": "^3.8.4",
     "prisma": "^7.8.0",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.68.0"
   },
   "overrides": {
     "deepmerge-ts": "^8.0.1"
