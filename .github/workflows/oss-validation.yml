@@ -1,0 +1,21 @@
+name: OSS contribution validation
+
+on:
+  push:
+    branches: [oss/validation-10-contributions]
+    paths:
+      - .github/workflows/oss-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          node --version
+          npm --version
+          git --version
+          git ls-remote https://github.com/swagger-api/swagger-ui.git HEAD
