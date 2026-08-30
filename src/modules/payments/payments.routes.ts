@@ -73,7 +73,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       const execution = simulateProviderExecution({
         provider: body.provider,
         category: 'payments',
-        shouldFail: body.simulateFailure,
+        shouldFail: body.simulateFailure ?? false,
       });
 
       return reply.code(201).send({
