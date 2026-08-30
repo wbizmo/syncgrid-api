@@ -18,13 +18,38 @@ import { apiKeyRoutes } from './modules/api-keys/api-keys.routes';
 import { logRoutes } from './modules/logs/logs.routes';
 import { teamRoutes } from './modules/teams/teams.routes';
 
+function allowedCorsOrigins(): string[] {
+  const configured = (process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (configured.length > 0) {
+    return configured;
+  }
+
+  return process.env.NODE_ENV === 'production'
+    ? []
+    : ['http://localhost:3000', 'http://localhost:5173'];
+}
+
 export async function buildApp() {
   const app = Fastify({
     logger: true,
   });
 
+  const corsOrigins = allowedCorsOrigins();
+
   await app.register(cors, {
-    origin: true,
+    credentials: false,
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      callback(null, corsOrigins.includes(origin));
+    },
   });
 
   await app.register(helmet);
