@@ -1,5 +1,14 @@
-node_modules
+node_modules/
 # Keep environment variables out of version control
 .env
+.env.*
+!.env.example
+
+# Local development databases must never be committed
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 
 /src/generated/prisma
