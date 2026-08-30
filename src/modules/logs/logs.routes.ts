@@ -55,9 +55,9 @@ export async function logRoutes(app: FastifyInstance) {
       const logs = await prisma.requestLog.findMany({
         where: {
           teamId,
-          method: query.method,
-          statusCode: query.statusCode,
-          apiKey: query.apiKey,
+          ...(query.method !== undefined ? { method: query.method } : {}),
+          ...(query.statusCode !== undefined ? { statusCode: query.statusCode } : {}),
+          ...(query.apiKey !== undefined ? { apiKey: query.apiKey } : {}),
         },
         orderBy: {
           createdAt: 'desc',

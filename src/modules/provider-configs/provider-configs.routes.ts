@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../../shared/prisma';
 
@@ -65,7 +66,7 @@ export async function providerConfigRoutes(app: FastifyInstance) {
           provider: body.provider,
           name: body.name,
           status: 'active',
-          config: body.config,
+          config: body.config as Prisma.InputJsonValue,
         },
       });
 
