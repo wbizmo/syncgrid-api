@@ -61,7 +61,7 @@ export async function emailRoutes(app: FastifyInstance) {
       const execution = simulateProviderExecution({
         provider: body.provider,
         category: 'email',
-        shouldFail: body.simulateFailure,
+        shouldFail: body.simulateFailure ?? false,
       });
 
       const messageId = `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
