@@ -14,8 +14,11 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members TeamMember[]
-  apiKeys ApiKey[]
+  members         TeamMember[]
+  apiKeys         ApiKey[]
+  providerConfigs ProviderConfig[]
+  webhookEvents   WebhookEvent[]
+  requestLogs     RequestLog[]
 }
 
 model TeamMember {
@@ -46,6 +49,7 @@ model ApiKey {
 
 model ProviderConfig {
   id        String   @id @default(cuid())
+  teamId    String?
   provider  String
   name      String
   status    String   @default("active")
@@ -53,11 +57,15 @@ model ProviderConfig {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
   @@index([provider])
 }
 
 model WebhookEvent {
   id         String   @id @default(cuid())
+  teamId     String?
   provider   String
   event      String
   status     String   @default("received")
@@ -65,12 +73,16 @@ model WebhookEvent {
   receivedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
   @@index([provider])
   @@index([status])
 }
 
 model RequestLog {
   id           String   @id @default(cuid())
+  teamId       String?
   method       String
   path         String
   statusCode   Int
@@ -78,6 +90,9 @@ model RequestLog {
   apiKey       String?
   createdAt    DateTime @default(now())
 
+  team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
   @@index([apiKey])
   @@index([createdAt])
 }
