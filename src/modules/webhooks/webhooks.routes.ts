@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../../shared/prisma';
 import { addWebhookReplayJob } from '../../jobs/queue';
 
@@ -10,6 +10,18 @@ const supportedWebhookProviders = [
   'mailgun',
   'sendgrid',
 ];
+
+function requireTeamId(request: FastifyRequest, reply: FastifyReply): string | null {
+  const teamId = request.authenticatedApiKey?.teamId ?? null;
+  if (!teamId) {
+    reply.code(403).send({
+      success: false,
+      message: 'A team-scoped API key is required for webhook operations.',
+    });
+    return null;
+  }
+  return teamId;
+}
 
 export async function webhookRoutes(app: FastifyInstance) {
   app.post(
@@ -40,11 +52,15 @@ export async function webhookRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
+      const teamId = requireTeamId(request, reply);
+      if (!teamId) return;
+
       const params = request.params as { provider: string };
       const payload = request.body as Record<string, unknown>;
 
       const webhookEvent = await prisma.webhookEvent.create({
         data: {
+          teamId,
           provider: params.provider,
           event: String(payload.event || payload.type || 'unknown.event'),
           status: 'received',
@@ -60,7 +76,10 @@ export async function webhookRoutes(app: FastifyInstance) {
     },
   );
 
-  app.get('/webhooks', async (request) => {
+  app.get('/webhooks', async (request, reply) => {
+    const teamId = requireTeamId(request, reply);
+    if (!teamId) return;
+
     const query = request.query as {
       provider?: string;
       status?: string;
@@ -68,6 +87,7 @@ export async function webhookRoutes(app: FastifyInstance) {
 
     const webhookEvents = await prisma.webhookEvent.findMany({
       where: {
+        teamId,
         provider: query.provider,
         status: query.status,
       },
@@ -84,11 +104,15 @@ export async function webhookRoutes(app: FastifyInstance) {
   });
 
   app.get('/webhooks/:id', async (request, reply) => {
+    const teamId = requireTeamId(request, reply);
+    if (!teamId) return;
+
     const params = request.params as { id: string };
 
-    const webhookEvent = await prisma.webhookEvent.findUnique({
+    const webhookEvent = await prisma.webhookEvent.findFirst({
       where: {
         id: params.id,
+        teamId,
       },
     });
 
@@ -106,11 +130,15 @@ export async function webhookRoutes(app: FastifyInstance) {
   });
 
   app.post('/webhooks/:id/replay', async (request, reply) => {
+    const teamId = requireTeamId(request, reply);
+    if (!teamId) return;
+
     const params = request.params as { id: string };
 
-    const webhookEvent = await prisma.webhookEvent.findUnique({
+    const webhookEvent = await prisma.webhookEvent.findFirst({
       where: {
         id: params.id,
+        teamId,
       },
     });
 
@@ -128,7 +156,7 @@ export async function webhookRoutes(app: FastifyInstance) {
 
     const replayedWebhookEvent = await prisma.webhookEvent.update({
       where: {
-        id: params.id,
+        id: webhookEvent.id,
       },
       data: {
         status: job ? 'queued' : 'replayed',
