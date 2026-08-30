@@ -48,14 +48,19 @@ export async function apiKeyRoutes(app: FastifyInstance) {
         });
       }
 
-      if (teamId) {
-        const teamExists = await prisma.team.findUnique({
-          where: { id: teamId },
-          select: { id: true },
+      if (!teamId) {
+        return reply.code(400).send({
+          success: false,
+          message: 'A team ID is required when issuing a team API key.',
         });
-        if (!teamExists) {
-          return reply.code(404).send({ success: false, message: 'Team not found' });
-        }
+      }
+
+      const teamExists = await prisma.team.findUnique({
+        where: { id: teamId },
+        select: { id: true },
+      });
+      if (!teamExists) {
+        return reply.code(404).send({ success: false, message: 'Team not found' });
       }
 
       const rawKey = `sg_live_${randomBytes(32).toString('base64url')}`;
@@ -78,10 +83,14 @@ export async function apiKeyRoutes(app: FastifyInstance) {
     },
   );
 
-  app.get('/api-keys', async (request) => {
+  app.get('/api-keys', async (request, reply) => {
     const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
+    if (!callerTeamId) {
+      return reply.code(403).send({ success: false, message: 'Bootstrap credentials cannot enumerate API keys.' });
+    }
+
     const apiKeys = await prisma.apiKey.findMany({
-      where: callerTeamId ? { teamId: callerTeamId } : undefined,
+      where: { teamId: callerTeamId },
       orderBy: {
         createdAt: 'desc',
       },
@@ -95,15 +104,16 @@ export async function apiKeyRoutes(app: FastifyInstance) {
   });
 
   app.get('/api-keys/:id', async (request, reply) => {
-    const params = request.params as {
-      id: string;
-    };
+    const params = request.params as { id: string };
     const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
+    if (!callerTeamId) {
+      return reply.code(403).send({ success: false, message: 'Bootstrap credentials cannot inspect API keys.' });
+    }
 
     const apiKey = await prisma.apiKey.findFirst({
       where: {
         id: params.id,
-        ...(callerTeamId ? { teamId: callerTeamId } : {}),
+        teamId: callerTeamId,
       },
     });
 
@@ -121,15 +131,16 @@ export async function apiKeyRoutes(app: FastifyInstance) {
   });
 
   app.delete('/api-keys/:id', async (request, reply) => {
-    const params = request.params as {
-      id: string;
-    };
+    const params = request.params as { id: string };
     const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
+    if (!callerTeamId) {
+      return reply.code(403).send({ success: false, message: 'Bootstrap credentials cannot revoke API keys.' });
+    }
 
     const apiKey = await prisma.apiKey.findFirst({
       where: {
         id: params.id,
-        ...(callerTeamId ? { teamId: callerTeamId } : {}),
+        teamId: callerTeamId,
       },
     });
 
