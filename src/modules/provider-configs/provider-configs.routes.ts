@@ -1,5 +1,22 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../../shared/prisma';
+
+function requireTeamId(request: FastifyRequest, reply: FastifyReply): string | null {
+  const teamId = request.authenticatedApiKey?.teamId ?? null;
+  if (!teamId) {
+    reply.code(403).send({
+      success: false,
+      message: 'A team-scoped API key is required for provider configurations.',
+    });
+    return null;
+  }
+  return teamId;
+}
+
+function safeProviderConfig<T extends { config: unknown }>(providerConfig: T) {
+  const { config: _config, ...safe } = providerConfig;
+  return safe;
+}
 
 export async function providerConfigRoutes(app: FastifyInstance) {
   app.post(
@@ -33,6 +50,9 @@ export async function providerConfigRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
+      const teamId = requireTeamId(request, reply);
+      if (!teamId) return;
+
       const body = request.body as {
         provider: string;
         name: string;
@@ -41,6 +61,7 @@ export async function providerConfigRoutes(app: FastifyInstance) {
 
       const providerConfig = await prisma.providerConfig.create({
         data: {
+          teamId,
           provider: body.provider,
           name: body.name,
           status: 'active',
@@ -50,13 +71,17 @@ export async function providerConfigRoutes(app: FastifyInstance) {
 
       return reply.code(201).send({
         success: true,
-        data: providerConfig,
+        data: safeProviderConfig(providerConfig),
       });
     },
   );
 
-  app.get('/provider-configs', async () => {
+  app.get('/provider-configs', async (request, reply) => {
+    const teamId = requireTeamId(request, reply);
+    if (!teamId) return;
+
     const providerConfigs = await prisma.providerConfig.findMany({
+      where: { teamId },
       orderBy: {
         createdAt: 'desc',
       },
@@ -65,18 +90,22 @@ export async function providerConfigRoutes(app: FastifyInstance) {
     return {
       success: true,
       count: providerConfigs.length,
-      data: providerConfigs,
+      data: providerConfigs.map(safeProviderConfig),
     };
   });
 
   app.get('/provider-configs/:id', async (request, reply) => {
+    const teamId = requireTeamId(request, reply);
+    if (!teamId) return;
+
     const params = request.params as {
       id: string;
     };
 
-    const providerConfig = await prisma.providerConfig.findUnique({
+    const providerConfig = await prisma.providerConfig.findFirst({
       where: {
         id: params.id,
+        teamId,
       },
     });
 
@@ -89,18 +118,22 @@ export async function providerConfigRoutes(app: FastifyInstance) {
 
     return {
       success: true,
-      data: providerConfig,
+      data: safeProviderConfig(providerConfig),
     };
   });
 
   app.delete('/provider-configs/:id', async (request, reply) => {
+    const teamId = requireTeamId(request, reply);
+    if (!teamId) return;
+
     const params = request.params as {
       id: string;
     };
 
-    const providerConfig = await prisma.providerConfig.findUnique({
+    const providerConfig = await prisma.providerConfig.findFirst({
       where: {
         id: params.id,
+        teamId,
       },
     });
 
@@ -113,7 +146,7 @@ export async function providerConfigRoutes(app: FastifyInstance) {
 
     const disabledProviderConfig = await prisma.providerConfig.update({
       where: {
-        id: params.id,
+        id: providerConfig.id,
       },
       data: {
         status: 'inactive',
@@ -123,7 +156,7 @@ export async function providerConfigRoutes(app: FastifyInstance) {
     return {
       success: true,
       message: 'Provider configuration disabled',
-      data: disabledProviderConfig,
+      data: safeProviderConfig(disabledProviderConfig),
     };
   });
 }
