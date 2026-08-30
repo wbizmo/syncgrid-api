@@ -2,4 +2,10 @@ node_modules
 # Keep environment variables out of version control
 .env
 
+# Local database files may contain credentials or customer data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
 /src/generated/prisma
