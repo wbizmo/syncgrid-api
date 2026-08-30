@@ -15,10 +15,12 @@ export async function requestLogger(
   reply.raw.on('finish', () => {
     const responseTime = Date.now() - start;
     const apiKey = request.headers['x-api-key'];
+    const teamId = request.authenticatedApiKey?.teamId ?? null;
 
     prisma.requestLog
       .create({
         data: {
+          teamId,
           method: request.method,
           path: request.url,
           statusCode: reply.statusCode,
