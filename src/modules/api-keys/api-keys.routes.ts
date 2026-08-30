@@ -1,5 +1,12 @@
+import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../shared/prisma';
+import { hashApiKey } from '../../shared/api-key-auth';
+
+function visibleApiKey<T extends { key: string }>(record: T) {
+  const { key: _secret, ...safe } = record;
+  return safe;
+}
 
 export async function apiKeyRoutes(app: FastifyInstance) {
   app.post(
@@ -8,7 +15,7 @@ export async function apiKeyRoutes(app: FastifyInstance) {
       schema: {
         tags: ['API Keys'],
         summary: 'Create API key',
-        description: 'Creates a new API key for accessing protected SyncGrid endpoints.',
+        description: 'Creates a new API key. The raw key is returned once and is never stored in plaintext.',
         body: {
           type: 'object',
           required: ['name'],
@@ -20,7 +27,7 @@ export async function apiKeyRoutes(app: FastifyInstance) {
             },
             teamId: {
               type: 'string',
-              description: 'Optional team ID that owns this API key.',
+              description: 'Team ID that owns this API key. Team-scoped callers cannot create keys for another team.',
             },
           },
         },
@@ -31,25 +38,50 @@ export async function apiKeyRoutes(app: FastifyInstance) {
         name: string;
         teamId?: string;
       };
+      const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
+      const teamId = callerTeamId ?? body.teamId ?? null;
 
+      if (callerTeamId && body.teamId && body.teamId !== callerTeamId) {
+        return reply.code(403).send({
+          success: false,
+          message: 'API keys can only be created for the authenticated team.',
+        });
+      }
+
+      if (teamId) {
+        const teamExists = await prisma.team.findUnique({
+          where: { id: teamId },
+          select: { id: true },
+        });
+        if (!teamExists) {
+          return reply.code(404).send({ success: false, message: 'Team not found' });
+        }
+      }
+
+      const rawKey = `sg_live_${randomBytes(32).toString('base64url')}`;
       const apiKey = await prisma.apiKey.create({
         data: {
           name: body.name,
-          teamId: body.teamId,
-          key: `sg_live_${Math.random().toString(36).slice(2)}${Date.now()}`,
+          teamId,
+          key: hashApiKey(rawKey),
           status: 'active',
         },
       });
 
       return reply.code(201).send({
         success: true,
-        data: apiKey,
+        data: {
+          ...visibleApiKey(apiKey),
+          key: rawKey,
+        },
       });
     },
   );
 
-  app.get('/api-keys', async () => {
+  app.get('/api-keys', async (request) => {
+    const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
     const apiKeys = await prisma.apiKey.findMany({
+      where: callerTeamId ? { teamId: callerTeamId } : undefined,
       orderBy: {
         createdAt: 'desc',
       },
@@ -58,7 +90,7 @@ export async function apiKeyRoutes(app: FastifyInstance) {
     return {
       success: true,
       count: apiKeys.length,
-      data: apiKeys,
+      data: apiKeys.map(visibleApiKey),
     };
   });
 
@@ -66,10 +98,12 @@ export async function apiKeyRoutes(app: FastifyInstance) {
     const params = request.params as {
       id: string;
     };
+    const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
 
-    const apiKey = await prisma.apiKey.findUnique({
+    const apiKey = await prisma.apiKey.findFirst({
       where: {
         id: params.id,
+        ...(callerTeamId ? { teamId: callerTeamId } : {}),
       },
     });
 
@@ -82,7 +116,7 @@ export async function apiKeyRoutes(app: FastifyInstance) {
 
     return {
       success: true,
-      data: apiKey,
+      data: visibleApiKey(apiKey),
     };
   });
 
@@ -90,10 +124,12 @@ export async function apiKeyRoutes(app: FastifyInstance) {
     const params = request.params as {
       id: string;
     };
+    const callerTeamId = request.authenticatedApiKey?.teamId ?? null;
 
-    const apiKey = await prisma.apiKey.findUnique({
+    const apiKey = await prisma.apiKey.findFirst({
       where: {
         id: params.id,
+        ...(callerTeamId ? { teamId: callerTeamId } : {}),
       },
     });
 
@@ -116,7 +152,7 @@ export async function apiKeyRoutes(app: FastifyInstance) {
     return {
       success: true,
       message: 'API key revoked successfully',
-      data: revokedApiKey,
+      data: visibleApiKey(revokedApiKey),
     };
   });
 }
