@@ -58,26 +58,17 @@ export async function buildApp() {
 
   app.addHook('onRequest', requestLogger);
 
+  app.addHook('preHandler', apiKeyAuth);
   app.addHook('preHandler', rateLimit);
 
-  app.addHook('preHandler', apiKeyAuth);
-
   await app.register(healthRoutes);
-
   await app.register(apiKeyRoutes);
-
   await app.register(providerRoutes);
-
   await app.register(providerConfigRoutes);
-
   await app.register(paymentRoutes);
-
   await app.register(emailRoutes);
-
   await app.register(webhookRoutes);
-
   await app.register(logRoutes);
-
   await app.register(teamRoutes);
 
   return app;
