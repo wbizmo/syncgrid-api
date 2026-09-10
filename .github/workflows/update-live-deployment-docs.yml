@@ -1,0 +1,45 @@
+name: Update live deployment docs
+
+on:
+  push:
+    branches: [docs/26-live-deployment]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update release-facing documentation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          readme = Path('README.md')
+          text = readme.read_text()
+          marker = "v1.0.1 hardens SyncGrid with patched Fastify and vulnerable transitives, safer API-key rate limiting, provider-secret read redaction, cryptographic external identifiers, worker log redaction, a direct static provider catalogue path without unnecessary Redis round trips, and regression coverage for the release-hardening invariants.\n\n---\n"
+          replacement = """v1.0.1 hardens SyncGrid with patched Fastify and vulnerable transitives, safer API-key rate limiting, provider-secret read redaction, cryptographic external identifiers, worker log redaction, a direct static provider catalogue path without unnecessary Redis round trips, and regression coverage for the release-hardening invariants.\n\n---\n\n## Live Deployment\n\n- API: https://syncgrid-api.onrender.com\n- Health: https://syncgrid-api.onrender.com/health\n- Swagger: https://syncgrid-api.onrender.com/docs\n\nThe Render production service auto-deploys from the authoritative `main` branch. Redis remains optional; the current service uses the project's SQLite production configuration.\n\n---\n"""
+          if marker not in text:
+              raise SystemExit('README marker not found')
+          readme.write_text(text.replace(marker, replacement, 1))
+
+          additions = {
+              'CHANGELOG.md': """\n### Deployment\n- Added the production Render service at https://syncgrid-api.onrender.com, tracking the authoritative `main` branch.\n- Health and Swagger endpoints are available at `/health` and `/docs`.\n""",
+              'RELEASE_NOTES.md': """\n### Production Deployment\n\n- API: https://syncgrid-api.onrender.com\n- Health: https://syncgrid-api.onrender.com/health\n- Swagger: https://syncgrid-api.onrender.com/docs\n\nThe Render service tracks the authoritative `main` branch.\n""",
+              'release-notes-v1.0.1.md': """\n### Production Deployment\n\n- API: https://syncgrid-api.onrender.com\n- Health: https://syncgrid-api.onrender.com/health\n- Swagger: https://syncgrid-api.onrender.com/docs\n\nThe Render service tracks the authoritative `main` branch.\n""",
+          }
+          for name, addition in additions.items():
+              path = Path(name)
+              current = path.read_text()
+              if 'https://syncgrid-api.onrender.com' not in current:
+                  path.write_text(current.rstrip() + '\n' + addition)
+      - name: Commit documentation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md CHANGELOG.md RELEASE_NOTES.md release-notes-v1.0.1.md
+          git diff --cached --quiet || git commit -m "docs: add SyncGrid production deployment"
+          git push origin HEAD:docs/26-live-deployment
