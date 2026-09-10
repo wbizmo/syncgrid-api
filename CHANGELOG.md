@@ -32,3 +32,7 @@ All notable changes to SyncGrid API are documented here. This project follows Se
 - Initial SyncGrid API release with provider abstraction, payments, email, webhooks, API-key authentication, team workspaces, request logs/analytics, Redis integration, BullMQ jobs, Swagger/OpenAPI documentation, SDK helper, and Docker-based local setup.
 
 [1.0.1]: https://github.com/wbizmo/syncgrid-api/releases/tag/v1.0.1
+
+### Deployment
+- Added the production Render service at https://syncgrid-api.onrender.com, tracking the authoritative `main` branch.
+- Health and Swagger endpoints are available at `/health` and `/docs`.

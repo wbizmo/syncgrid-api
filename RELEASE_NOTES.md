@@ -31,3 +31,11 @@ No breaking API changes are intended in v1.0.1.
 Provider credential encryption at rest is intentionally deferred to a migration-oriented release because it requires explicit key storage, rotation, and migration handling.
 
 Release commit: `7ee8885d6a89a5c701e926b340779c148416f132`.
+
+### Production Deployment
+
+- API: https://syncgrid-api.onrender.com
+- Health: https://syncgrid-api.onrender.com/health
+- Swagger: https://syncgrid-api.onrender.com/docs
+
+The Render service tracks the authoritative `main` branch.
