@@ -28,3 +28,11 @@ This is a patch release with no intended breaking API changes.
 ### Follow-up
 
 Provider credential encryption at rest remains tracked separately because it requires explicit migration, key-management, and rotation handling.
+
+### Production Deployment
+
+- API: https://syncgrid-api.onrender.com
+- Health: https://syncgrid-api.onrender.com/health
+- Swagger: https://syncgrid-api.onrender.com/docs
+
+The Render service tracks the authoritative `main` branch.

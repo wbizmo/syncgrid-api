@@ -21,6 +21,16 @@ v1.0.1 hardens SyncGrid with patched Fastify and vulnerable transitives, safer A
 
 ---
 
+## Live Deployment
+
+- API: https://syncgrid-api.onrender.com
+- Health: https://syncgrid-api.onrender.com/health
+- Swagger: https://syncgrid-api.onrender.com/docs
+
+The Render production service auto-deploys from the authoritative `main` branch. Redis remains optional; the current service uses the project's SQLite production configuration.
+
+---
+
 ## Overview
 
 Modern applications often depend on multiple third-party services.
