@@ -8,29 +8,21 @@ export function startWorkers() {
     return;
   }
 
-  new Worker(
-    'webhook-retries',
-    async (job) => {
-      console.log('Processing webhook replay job:', job.data);
-    },
-    {
-      connection: {
-        url: redisUrl,
-      },
-    },
-  );
+  new Worker('webhook-retries', async (job) => {
+    console.log('Processing webhook replay job:', {
+      id: job.id,
+      webhookEventId: job.data.webhookEventId,
+      provider: job.data.provider,
+    });
+  }, { connection: { url: redisUrl } });
 
-  new Worker(
-    'integration-jobs',
-    async (job) => {
-      console.log('Processing integration job:', job.data);
-    },
-    {
-      connection: {
-        url: redisUrl,
-      },
-    },
-  );
+  new Worker('integration-jobs', async (job) => {
+    console.log('Processing integration job:', {
+      id: job.id,
+      type: job.data.type,
+      provider: job.data.provider,
+    });
+  }, { connection: { url: redisUrl } });
 
   console.log('BullMQ workers started.');
 }
