@@ -9,7 +9,7 @@ export async function registerSwagger(app: FastifyInstance) {
         title: 'SyncGrid API',
         description:
           'A unified integration gateway API for payments, email, webhooks, provider routing, API keys, request logs, and third-party service abstraction.',
-        version: '1.0.0',
+        version: '1.0.1',
       },
       tags: [
         { name: 'System', description: 'System health and API status' },

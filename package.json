@@ -1,6 +1,6 @@
 {
   "name": "syncgrid-api",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A unified integration gateway API for payments, email, webhooks, provider routing, API keys, request logs, and third-party service abstraction.",
   "private": true,
   "type": "commonjs",
