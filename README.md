@@ -6,6 +6,21 @@ SyncGrid provides a single API layer that sits between applications and external
 
 ---
 
+## Current Release
+
+**Version:** `1.0.1`  
+**Tag:** `v1.0.1`  
+**Release:** [SyncGrid API v1.0.1 — Security & Efficiency Hardening](https://github.com/wbizmo/syncgrid-api/releases/tag/v1.0.1)
+
+Release documentation:
+
+- [Changelog](./CHANGELOG.md)
+- [Release notes](./RELEASE_NOTES.md)
+
+v1.0.1 hardens SyncGrid with patched Fastify and vulnerable transitives, safer API-key rate limiting, provider-secret read redaction, cryptographic external identifiers, worker log redaction, a direct static provider catalogue path without unnecessary Redis round trips, and regression coverage for the release-hardening invariants.
+
+---
+
 ## Overview
 
 Modern applications often depend on multiple third-party services.
@@ -120,7 +135,8 @@ Supported providers:
 * Redis caching support
 * BullMQ background jobs
 * Queue-based webhook replay
-* Rate limiting
+* Bounded API-key rate limiting
+* Static provider catalogue requests bypass Redis in v1.0.1
 
 ### Developer Experience
 
@@ -611,7 +627,7 @@ If `REDIS_URL` is provided:
 
 ## Rate Limiting
 
-Protected endpoints are rate limited per API key.
+Protected endpoints are rate limited per authenticated API key.
 
 Responses include rate limit headers:
 
@@ -620,6 +636,8 @@ x-ratelimit-limit
 x-ratelimit-remaining
 x-ratelimit-reset
 ```
+
+v1.0.1 uses an atomic Redis counter when Redis is available and a bounded in-process fallback otherwise.
 
 ---
 
@@ -637,6 +655,7 @@ Potential future improvements:
 * Published SDK package
 * Hosted management dashboard
 * Usage-based pricing plans
+* Provider credential encryption at rest with managed key rotation
 
 ---
 
